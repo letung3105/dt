@@ -1,9 +1,31 @@
-/// A hash map that resolves coliding key with a linked list.
+use std::collections::hash_map::RandomState;
+use std::hash::{BuildHasher, Hash, Hasher};
+
+/// A basic hash map.
+///
+/// It is required that the keys implement the [`Eq`] and [`Hash`] traits, although this can
+/// frequently be achieved by using `#[derive(PartialEq, Eq, Hash)]`. If you implement these
+/// yourself, it is important that the following property holds:
+///
+/// ```text
+/// k1 == k2 -> hash(k1) == hash(k2)
+/// ```
+///
+/// In other words, if two keys are equal, their hashes must be equal.
+///
+/// # Attributions
+///
+/// This `LinkedHashMap` implementation is based off [Jon Gjengset's livestream] on the concept and
+/// implementation of the data structure itself. The [source code] of the project from the
+/// livestream can be found on Github.
+///
+/// [Jon Gjengset's livestream]: https://www.youtube.com/watch?v=k6xR2kf9hlA
+/// [source code]: https://github.com/jonhoo/rust-basic-hashmap
 ///
 /// # Examples
 ///
 /// ```
-/// use dt::collections::LinkedHashMap;
+/// use dt::containers::LinkedHashMap;
 ///
 /// // Type inference lets us omit an explicit type signature (which
 /// // would be `LinkedHashMap<String, String>` in this example).
@@ -28,7 +50,7 @@
 /// );
 ///
 /// // Check for a specific one.
-/// // When collections store owned values (String), they can still be
+/// // When containers store owned values (String), they can still be
 /// // queried using references (&str).
 /// if !book_reviews.contains_key("Les Misérables") {
 ///     println!("We've got {} reviews, but Les Misérables ain't one.",
@@ -55,12 +77,12 @@
 ///     println!("{}: \"{}\"", book, review);
 /// }
 /// ```
-/// /// ```
-/// use std::collections::HashMap;
+/// ```
+/// use dt::containers::LinkedHashMap;
 ///
 /// // type inference lets us omit an explicit type signature (which
-/// // would be `HashMap<&str, u8>` in this example).
-/// let mut player_stats = HashMap::new();
+/// // would be `LinkedHashMap<&str, u8>` in this example).
+/// let mut player_stats = LinkedHashMap::new();
 ///
 /// fn random_stat_buff() -> u8 {
 ///     // could actually return some random value here - let's just return
@@ -80,11 +102,11 @@
 /// *stat += random_stat_buff();
 /// ```
 ///
-/// The easiest way to use `HashMap` with a custom key type is to derive [`Eq`] and [`Hash`].
+/// The easiest way to use `LinkedHashMap` with a custom key type is to derive [`Eq`] and [`Hash`].
 /// We must also derive [`PartialEq`].
 ///
 /// ```
-/// use std::collections::HashMap;
+/// use dt::containers::LinkedHashMap;
 ///
 /// #[derive(Hash, Eq, PartialEq, Debug)]
 /// struct Viking {
@@ -99,8 +121,8 @@
 ///     }
 /// }
 ///
-/// // Use a HashMap to store the vikings' health points.
-/// let mut vikings = HashMap::new();
+/// // Use a LinkedHashMap to store the vikings' health points.
+/// let mut vikings = LinkedHashMap::new();
 ///
 /// vikings.insert(Viking::new("Einar", "Norway"), 25);
 /// vikings.insert(Viking::new("Olaf", "Denmark"), 24);
@@ -115,11 +137,207 @@
 /// TODO: impl<K,V> From<&[(K, V)]> for LinkedHashMap<K,V>
 ///
 /// ```
-/// use std::collections::HashMap;
+/// use dt::containers::LinkedHashMap;
 ///
-/// let timber_resources: HashMap<&str, i32> = [("Norway", 100), ("Denmark", 50), ("Iceland", 10)]
+/// let timber_resources: LinkedHashMap<&str, i32> = [("Norway", 100), ("Denmark", 50), ("Iceland", 10)]
 ///     .iter().cloned().collect();
 /// // use the values stored in map
 /// ```
 #[derive(Debug)]
-pub struct LinkedHashMap {}
+pub struct LinkedHashMap<K, V, S = RandomState> {
+    // This hash map implementation relies on an array of buckets that is indexed by the hash of an
+    // entry's key. If 2 different keys are hashed to the same value, the entries are put into the
+    // same bucket. These entries can later be retrieved by comparing both the hashed key and the
+    // actual key.
+    buckets: Vec<Bucket<K, V>>,
+    build_hasher: S,
+    entries_count: usize,
+}
+
+impl<K, V> Default for LinkedHashMap<K, V, RandomState> {
+    fn default() -> Self {
+        Self {
+            buckets: Vec::new(),
+            build_hasher: RandomState::new(),
+            entries_count: 0,
+        }
+    }
+}
+
+impl<K, V> LinkedHashMap<K, V, RandomState> {
+    /// Creates an empty `LinkedHashMap`.
+    ///
+    /// The hash map is initially created with an empty list of buckets, so it will not allocate
+    /// until it is first inserted into.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dt::containers::LinkedHashMap;
+    /// let mut map: LinkedHashMap<&str, i32> = LinkedHashMap::new();
+    /// ```
+    pub fn new() -> Self {
+        Default::default()
+    }
+}
+
+impl<K, V> LinkedHashMap<K, V, RandomState>
+where
+    K: Hash + Eq,
+{
+    /// Inserts a key-value pair into the map.
+    ///
+    /// If the map did not have this key present, [`None`] is returned.
+    ///
+    /// If the map did have this key present, the value is updated, and the old value is returned.
+    /// The key is not updated, though; this matters for types that can be `==` without being
+    /// identical.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dt::containers::LinkedHashMap;
+    ///
+    /// let mut map = LinkedHashMap::new();
+    /// assert_eq!(map.insert(37, "a"), None);
+    /// assert_eq!(map.is_empty(), false);
+    ///
+    /// map.insert(37, "b");
+    /// assert_eq!(map.insert(37, "c"), Some("b"));
+    /// assert_eq!(map[&37], "c");
+    /// ```
+    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+        if self.buckets.is_empty() || self.entries_count > 3 * self.buckets.len() / 4 {
+            self.grow();
+        }
+
+        let idx = self.index(&key);
+        let bucket = &mut self.buckets[idx];
+
+        for &mut (ref k, ref mut v) in bucket.items.iter_mut() {
+            if *k == key {
+                return Some(std::mem::replace(v, value));
+            }
+        }
+        bucket.items.push((key, value));
+        self.entries_count += 1;
+        None
+    }
+
+    /// Returns a reference to the value corresponding to the key.
+    ///
+    /// TODO: make the below statement true for our map
+    /// The key may be any borrowed form of the map’s key type, but Hash and Eq on the borrowed
+    /// form must match those for the key type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dt::containers::LinkedHashMap;
+    /// let mut map = HashMap::new();
+    /// map.insert(1, "a");
+    /// assert_eq!(map.get(&1), Some(&"a"));
+    /// assert_eq!(map.get(&2), None);
+    /// ```
+    pub fn get(&self, key: &K) -> Option<&V> {
+        let idx = self.index(key);
+        self.buckets[idx]
+            .items
+            .iter()
+            .find(|&(ref k, _)| k == key)
+            .map(|&(_, ref v)| v)
+    }
+
+    /// Removes a key from the map, returning the value at the key if the key was previously in the
+    /// map.
+    ///
+    /// TODO: make the below statement true for our map
+    /// The key may be any borrowed form of the map’s key type, but Hash and Eq on the borrowed
+    /// form must match those for the key type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    ///
+    /// let mut map = HashMap::new();
+    /// map.insert(1, "a");
+    /// assert_eq!(map.remove(&1), Some("a"));
+    /// assert_eq!(map.remove(&1), None);
+    /// ```
+    pub fn remove(&mut self, key: &K) -> Option<V> {
+        // self.buckets.remove
+        let idx = self.index(&key);
+        let bucket = &mut self.buckets[idx];
+
+        let entry_idx = bucket.items.iter().position(|&(ref k, _)| k == key)?;
+        self.entries_count -= 1;
+        Some(bucket.items.swap_remove(entry_idx).1)
+    }
+
+    /// Increase the size of the array of buckets. If there is no bucket, extend the array by one,
+    /// otherwise, double the array's size and reindex all existing entries.
+    fn grow(&mut self) {
+        let target_size = match self.buckets.len() {
+            0 => 1,
+            n => 2 * n,
+        };
+        let mut buckets = Vec::with_capacity(target_size);
+        buckets.extend((0..target_size).map(|_| Bucket::default()));
+        for (k, v) in self
+            .buckets
+            .iter_mut()
+            .flat_map(|bucket| bucket.items.drain(..))
+        {
+            let idx = hashmod(self.build_hasher.build_hasher(), &k, target_size) as usize;
+            buckets[idx].items.push((k, v));
+        }
+        self.buckets = buckets;
+    }
+
+    /// Get the index of the bucket for `key`
+    fn index(&self, key: &K) -> usize {
+        hashmod(self.build_hasher.build_hasher(), key, self.buckets.len()) as usize
+    }
+}
+
+/// Hash the `hashable` value with the `hasher`, then modulo the hash value with `divisor`.
+fn hashmod<H, T>(mut hasher: H, hashable: T, divisor: usize) -> usize
+where
+    H: Hasher,
+    T: Hash,
+{
+    hashable.hash(&mut hasher);
+    (hasher.finish() % divisor as u64) as usize
+}
+
+/// A data item that holds entries in [`LinkedHashMap`] whose key is hashed to the same value.
+///
+/// [`LinkedHashMap`]: crate::containers::LinkedHashMap
+#[derive(Debug)]
+struct Bucket<K, V> {
+    items: Vec<(K, V)>,
+}
+
+impl<K, V> Default for Bucket<K, V> {
+    fn default() -> Self {
+        Self { items: Vec::new() }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn basic_crud_opeartions() {
+        let mut map = LinkedHashMap::new();
+        map.insert("foo", 42);
+        assert_eq!(map.get(&"foo"), Some(&42));
+        map.insert("foo", 43);
+        assert_eq!(map.get(&"foo"), Some(&43));
+        assert_eq!(map.remove(&"foo"), Some(43));
+        assert_eq!(map.remove(&"foo"), None);
+        assert_eq!(map.get(&"foo"), None);
+    }
+}
