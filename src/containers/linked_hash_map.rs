@@ -77,30 +77,6 @@ use std::hash::{BuildHasher, Hash, Hasher};
 ///     println!("{}: \"{}\"", book, review);
 /// }
 /// ```
-/// ```
-/// use dt::containers::LinkedHashMap;
-///
-/// // type inference lets us omit an explicit type signature (which
-/// // would be `LinkedHashMap<&str, u8>` in this example).
-/// let mut player_stats = LinkedHashMap::new();
-///
-/// fn random_stat_buff() -> u8 {
-///     // could actually return some random value here - let's just return
-///     // some fixed value for now
-///     42
-/// }
-///
-/// // insert a key only if it doesn't already exist
-/// player_stats.entry("health").or_insert(100);
-///
-/// // insert a key using a function that provides a new value only if it
-/// // doesn't already exist
-/// player_stats.entry("defence").or_insert_with(random_stat_buff);
-///
-/// // update a key, guarding against the key possibly not being set
-/// let stat = player_stats.entry("attack").or_insert(100);
-/// *stat += random_stat_buff();
-/// ```
 ///
 /// The easiest way to use `LinkedHashMap` with a custom key type is to derive [`Eq`] and [`Hash`].
 /// We must also derive [`PartialEq`].
@@ -133,14 +109,6 @@ use std::hash::{BuildHasher, Hash, Hasher};
 ///     println!("{:?} has {} hp", viking, health);
 /// }
 /// ```
-///
-/// ```
-/// use dt::containers::LinkedHashMap;
-///
-/// let timber_resources: LinkedHashMap<&str, i32> =
-///     [("Norway", 100), ("Denmark", 50), ("Iceland", 10)].iter().cloned().collect();
-/// // use the values stored in map
-/// ```
 #[derive(Debug)]
 pub struct LinkedHashMap<K, V, S = RandomState> {
     // This hash map implementation relies on an array of buckets that is indexed by the hash of an
@@ -162,10 +130,7 @@ impl<K, V> Default for LinkedHashMap<K, V, RandomState> {
     }
 }
 
-impl<K, V> LinkedHashMap<K, V, RandomState>
-where
-    K: Hash + Eq,
-{
+impl<K, V> LinkedHashMap<K, V, RandomState> {
     /// Creates an empty `LinkedHashMap`.
     ///
     /// The hash map is initially created with an empty list of buckets, so it will not allocate
@@ -180,7 +145,47 @@ where
     pub fn new() -> Self {
         Default::default()
     }
+}
 
+impl<K, V, S> LinkedHashMap<K, V, S> {
+    /// Returns the number of elements in the map.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dt::containers::LinkedHashMap;
+    ///
+    /// let mut a = LinkedHashMap::new();
+    /// assert_eq!(a.len(), 0);
+    /// a.insert(1, "a");
+    /// assert_eq!(a.len(), 1);
+    /// ```
+    pub fn len(&self) -> usize {
+        self.entries_count
+    }
+
+    /// Returns true if the map contains no elements.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dt::containers::LinkedHashMap;
+    ///
+    /// let mut a = LinkedHashMap::new();
+    /// assert!(a.is_empty());
+    /// a.insert(1, "a");
+    /// assert!(!a.is_empty());
+    /// ```
+    pub fn is_empty(&self) -> bool {
+        self.entries_count == 0
+    }
+}
+
+impl<K, V, S> LinkedHashMap<K, V, S>
+where
+    K: Hash + Eq,
+    S: BuildHasher,
+{
     /// Inserts a key-value pair into the map.
     ///
     /// If the map did not have this key present, [`None`] is returned.
@@ -230,7 +235,7 @@ where
     ///
     /// ```
     /// use dt::containers::LinkedHashMap;
-    /// let mut map = HashMap::new();
+    /// let mut map = LinkedHashMap::new();
     /// map.insert(1, "a");
     /// assert_eq!(map.get(&1), Some(&"a"));
     /// assert_eq!(map.get(&2), None);
@@ -254,9 +259,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use std::collections::HashMap;
+    /// use dt::containers::LinkedHashMap;
     ///
-    /// let mut map = HashMap::new();
+    /// let mut map = LinkedHashMap::new();
     /// map.insert(1, "a");
     /// assert_eq!(map.remove(&1), Some("a"));
     /// assert_eq!(map.remove(&1), None);
@@ -279,9 +284,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use std::collections::HashMap;
+    /// use dt::containers::LinkedHashMap;
     ///
-    /// let mut map = HashMap::new();
+    /// let mut map = LinkedHashMap::new();
     /// map.insert(1, "a");
     /// assert_eq!(map.contains_key(&1), true);
     /// assert_eq!(map.contains_key(&2), false);
@@ -293,38 +298,6 @@ where
             .iter()
             .find(|&(ref k, _)| k == key)
             .is_some()
-    }
-
-    /// Returns the number of elements in the map.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::collections::HashMap;
-    ///
-    /// let mut a = HashMap::new();
-    /// assert_eq!(a.len(), 0);
-    /// a.insert(1, "a");
-    /// assert_eq!(a.len(), 1);
-    /// ```
-    pub fn len(&self) -> usize {
-        self.entries_count
-    }
-
-    /// Returns true if the map contains no elements.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::collections::HashMap;
-    ///
-    /// let mut a = HashMap::new();
-    /// assert!(a.is_empty());
-    /// a.insert(1, "a");
-    /// assert!(!a.is_empty());
-    /// ```
-    pub fn is_empty(&self) -> bool {
-        self.entries_count == 0
     }
 
     /// Increase the size of the array of buckets. If there is no bucket, extend the array by one,
@@ -341,7 +314,7 @@ where
             .iter_mut()
             .flat_map(|bucket| bucket.items.drain(..))
         {
-            let idx = Self::key_to_idx(self.build_hasher.build_hasher(), &key, target_size);
+            let idx = derive_bucket_index(self.build_hasher.build_hasher(), &key, target_size);
             buckets[idx].items.push((key, value));
         }
         self.buckets = buckets;
@@ -349,17 +322,18 @@ where
 
     /// Get the index of the bucket for `key`
     fn index(&self, key: &K) -> usize {
-        Self::key_to_idx(self.build_hasher.build_hasher(), key, self.buckets.len())
+        derive_bucket_index(self.build_hasher.build_hasher(), key, self.buckets.len())
     }
+}
 
-    /// Hash the `hashable` value with the `hasher`, then modulo the hash value with `divisor`.
-    fn key_to_idx<H>(mut hasher: H, key: &K, n_buckets: usize) -> usize
-    where
-        H: Hasher,
-    {
-        key.hash(&mut hasher);
-        (hasher.finish() % n_buckets as u64) as usize
-    }
+/// Deriving the bucket's index from the `hashable` value
+fn derive_bucket_index<H, T>(mut hasher: H, hashable: &T, n_buckets: usize) -> usize
+where
+    H: Hasher,
+    T: Hash,
+{
+    hashable.hash(&mut hasher);
+    (hasher.finish() % n_buckets as u64) as usize
 }
 
 /// A data item that holds entries in [`LinkedHashMap`] whose key is hashed to the same value.
