@@ -326,14 +326,46 @@ where
     }
 }
 
-/// Deriving the bucket's index from the `hashable` value
-fn derive_bucket_index<H, T>(mut hasher: H, hashable: &T, n_buckets: usize) -> usize
-where
-    H: Hasher,
-    T: Hash,
-{
-    hashable.hash(&mut hasher);
-    (hasher.finish() % n_buckets as u64) as usize
+impl<'a, K, V, S> IntoIterator for &'a LinkedHashMap<K, V, S> {
+    type Item = (&'a K, &'a V);
+
+    type IntoIter = Iter<'a, K, V, S>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter {
+            map: self,
+            bucket_idx: 0,
+            bucket_entry_idx: 0,
+        }
+    }
+}
+
+/// An iterator over the elements of a [`LinkedHashMap`].
+///
+/// [`LinkedHashMap`]: crate::containers::LinkedHashMap
+#[derive(Debug)]
+pub struct Iter<'a, K, V, S> {
+    map: &'a LinkedHashMap<K, V, S>,
+    bucket_idx: usize,
+    bucket_entry_idx: usize,
+}
+
+impl<'a, K, V, S> Iterator for Iter<'a, K, V, S> {
+    type Item = (&'a K, &'a V);
+
+    /// We keep two indices, one index for the bucket and one index for the entry within the bucket
+    /// that is currently pointed at.
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(bucket) = self.map.buckets.get(self.bucket_idx) {
+            if let Some(&(ref key, ref value)) = bucket.items.get(self.bucket_entry_idx) {
+                self.bucket_entry_idx += 1;
+                return Some((key, value));
+            }
+            self.bucket_idx += 1;
+            self.bucket_entry_idx = 0;
+        }
+        None
+    }
 }
 
 /// A data item that holds entries in [`LinkedHashMap`] whose key is hashed to the same value.
@@ -348,6 +380,16 @@ impl<K, V> Default for Bucket<K, V> {
     fn default() -> Self {
         Self { items: Vec::new() }
     }
+}
+
+/// Deriving the bucket's index from the `hashable` value
+fn derive_bucket_index<H, T>(mut hasher: H, hashable: &T, n_buckets: usize) -> usize
+where
+    H: Hasher,
+    T: Hash,
+{
+    hashable.hash(&mut hasher);
+    (hasher.finish() % n_buckets as u64) as usize
 }
 
 #[cfg(test)]
