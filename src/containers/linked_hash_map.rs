@@ -116,7 +116,7 @@ pub struct LinkedHashMap<K, V, S = RandomState> {
     // same bucket. These entries can later be retrieved by comparing both the hashed key and the
     // actual key.
     buckets: Vec<Bucket<K, V>>,
-    build_hasher: S,
+    hasher_builder: S,
     entries_count: usize,
 }
 
@@ -124,7 +124,7 @@ impl<K, V> Default for LinkedHashMap<K, V, RandomState> {
     fn default() -> Self {
         Self {
             buckets: Vec::new(),
-            build_hasher: RandomState::new(),
+            hasher_builder: RandomState::new(),
             entries_count: 0,
         }
     }
@@ -314,7 +314,7 @@ where
             .iter_mut()
             .flat_map(|bucket| bucket.items.drain(..))
         {
-            let idx = derive_bucket_index(self.build_hasher.build_hasher(), &key, target_size);
+            let idx = derive_bucket_index(self.hasher_builder.build_hasher(), &key, target_size);
             buckets[idx].items.push((key, value));
         }
         self.buckets = buckets;
@@ -322,7 +322,7 @@ where
 
     /// Get the index of the bucket for `key`
     fn index(&self, key: &K) -> usize {
-        derive_bucket_index(self.build_hasher.build_hasher(), key, self.buckets.len())
+        derive_bucket_index(self.hasher_builder.build_hasher(), key, self.buckets.len())
     }
 }
 
