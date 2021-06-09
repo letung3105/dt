@@ -320,7 +320,7 @@ where
         self.buckets = buckets;
     }
 
-    /// Get the index of the bucket for `key`
+    /// Get the index of the bucket for `key`.
     fn index(&self, key: &K) -> usize {
         derive_bucket_index(self.hasher_builder.build_hasher(), key, self.buckets.len())
     }
@@ -382,7 +382,7 @@ impl<K, V> Default for Bucket<K, V> {
     }
 }
 
-/// Deriving the bucket's index from the `hashable` value
+/// Deriving the bucket's index from the `hashable` value.
 fn derive_bucket_index<H, T>(mut hasher: H, hashable: &T, n_buckets: usize) -> usize
 where
     H: Hasher,
@@ -395,34 +395,67 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
-    fn basic_crud_opeartions() {
+    fn basic_crud() {
         let mut map = LinkedHashMap::new();
         assert_eq!(map.len(), 0);
         assert!(map.is_empty());
 
-        // create
+        // Test creation.
         map.insert("foo", 42);
         assert_eq!(map.get(&"foo"), Some(&42));
         assert_eq!(map.len(), 1);
         assert!(!map.is_empty());
 
-        // update
+        // Test update.
         map.insert("foo", 43);
         assert_eq!(map.get(&"foo"), Some(&43));
         assert_eq!(map.len(), 1);
         assert!(!map.is_empty());
 
-        // remove
+        // Test removal.
         assert_eq!(map.remove(&"foo"), Some(43));
         assert_eq!(map.len(), 0);
         assert!(map.is_empty());
 
-        // non-existent key
+        // Test operations on a non-existent key.
         assert_eq!(map.get(&"foo"), None);
         assert_eq!(map.remove(&"foo"), None);
         assert_eq!(map.len(), 0);
         assert!(map.is_empty());
+    }
+
+    #[test]
+    fn iterator() {
+        // Keys and values to insert. Keys must be pair-wise different.
+        let test_vals: HashMap<_, _> = vec![("foo", 7), ("bar", 11), ("baz", 13), ("quox", 17)]
+            .into_iter()
+            .collect();
+        // Keep track of whether an entry has been seen.
+        let mut has_seen: HashMap<_, _> = vec![
+            ("foo", false),
+            ("bar", false),
+            ("baz", false),
+            ("quox", false),
+        ]
+        .into_iter()
+        .collect();
+
+        let mut map = LinkedHashMap::new();
+        for (&k, &v) in &test_vals {
+            map.insert(k, v);
+        }
+
+        for (&k, &v) in &map {
+            let expected = test_vals.get(k).cloned().unwrap();
+            // Check if the iterator returns the correct item.
+            assert_eq!(v, expected);
+            // Check if some key is returned once again.
+            assert_eq!(has_seen.insert(k, true), Some(false));
+        }
+        // Check if the iterator has gone through all items.
+        assert!(has_seen.iter().all(|(_, &v)| v));
     }
 }
