@@ -4,30 +4,6 @@ use std::hash::{BuildHasher, Hash, Hasher};
 use std::iter::FromIterator;
 use std::ops::Index;
 
-/// A data item that holds entries in [`LinkedHashMap`] whose key is hashed to the same value.
-///
-/// [`LinkedHashMap`]: crate::containers::LinkedHashMap
-#[derive(Debug)]
-struct Bucket<K, V> {
-    items: Vec<(K, V)>,
-}
-
-impl<K, V> Default for Bucket<K, V> {
-    fn default() -> Self {
-        Self { items: Vec::new() }
-    }
-}
-
-/// Deriving the bucket's index from the `hashable` value.
-fn derive_bucket_index<H, K>(mut hasher: H, key: &K, n_buckets: usize) -> usize
-where
-    H: Hasher,
-    K: Hash + ?Sized,
-{
-    key.hash(&mut hasher);
-    (hasher.finish() % n_buckets as u64) as usize
-}
-
 /// A basic hash map.
 ///
 /// It is required that the keys implement the [`Eq`] and [`Hash`] traits, although this can
@@ -185,6 +161,30 @@ pub struct LinkedHashMap<K, V, S = RandomState> {
     buckets: Vec<Bucket<K, V>>,
     hasher_builder: S,
     entries_count: usize,
+}
+
+/// A data item that holds entries in [`LinkedHashMap`] whose key is hashed to the same value.
+///
+/// [`LinkedHashMap`]: crate::containers::LinkedHashMap
+#[derive(Debug)]
+struct Bucket<K, V> {
+    items: Vec<(K, V)>,
+}
+
+impl<K, V> Default for Bucket<K, V> {
+    fn default() -> Self {
+        Self { items: Vec::new() }
+    }
+}
+
+/// Deriving the bucket's index from the `hashable` value.
+fn derive_bucket_index<H, K>(mut hasher: H, key: &K, n_buckets: usize) -> usize
+where
+    H: Hasher,
+    K: Hash + ?Sized,
+{
+    key.hash(&mut hasher);
+    (hasher.finish() % n_buckets as u64) as usize
 }
 
 impl<K, V> Default for LinkedHashMap<K, V, RandomState> {
@@ -481,20 +481,6 @@ where
     }
 }
 
-impl<'a, K, V, S> IntoIterator for &'a LinkedHashMap<K, V, S> {
-    type Item = (&'a K, &'a V);
-
-    type IntoIter = Iter<'a, K, V, S>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        Self::IntoIter {
-            map: self,
-            bucket_idx: 0,
-            bucket_entry_idx: 0,
-        }
-    }
-}
-
 /// An iterator over the elements of a [`LinkedHashMap`].
 ///
 /// [`LinkedHashMap`]: crate::containers::LinkedHashMap
@@ -520,6 +506,58 @@ impl<'a, K, V, S> Iterator for Iter<'a, K, V, S> {
             self.bucket_entry_idx = 0;
         }
         None
+    }
+}
+
+impl<'a, K, V, S> IntoIterator for &'a LinkedHashMap<K, V, S> {
+    type Item = (&'a K, &'a V);
+
+    type IntoIter = Iter<'a, K, V, S>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter {
+            map: self,
+            bucket_idx: 0,
+            bucket_entry_idx: 0,
+        }
+    }
+}
+
+/// An iterator over the elements of a [`LinkedHashMap`].
+///
+/// [`LinkedHashMap`]: crate::containers::LinkedHashMap
+#[derive(Debug)]
+pub struct IntoIter<K, V, S> {
+    map: LinkedHashMap<K, V, S>,
+    bucket_idx: usize,
+}
+
+impl<K, V, S> Iterator for IntoIter<K, V, S> {
+    type Item = (K, V);
+
+    /// We keep two indices, one index for the bucket and one index for the entry within the bucket
+    /// that is currently pointed at.
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(bucket) = self.map.buckets.get_mut(self.bucket_idx) {
+            if let Some((key, value)) = bucket.items.pop() {
+                return Some((key, value));
+            }
+            self.bucket_idx += 1;
+        }
+        None
+    }
+}
+
+impl<K, V, S> IntoIterator for LinkedHashMap<K, V, S> {
+    type Item = (K, V);
+
+    type IntoIter = IntoIter<K, V, S>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter {
+            map: self,
+            bucket_idx: 0,
+        }
     }
 }
 
@@ -636,6 +674,7 @@ mod tests {
         // Test creation.
         map.insert("foo", 42);
         assert_eq!(map.get(&"foo"), Some(&42));
+        assert_eq!(map[&"foo"], 42);
         assert_eq!(map.len(), 1);
         assert!(!map.is_empty());
 
@@ -663,6 +702,7 @@ mod tests {
         let test_vals: HashMap<_, _> = vec![("foo", 7), ("bar", 11), ("baz", 13), ("quox", 17)]
             .into_iter()
             .collect();
+
         // Keep track of whether an entry has been seen.
         let mut has_seen: HashMap<_, _> = vec![
             ("foo", false),
@@ -679,6 +719,17 @@ mod tests {
         }
 
         for (&k, &v) in &map {
+            let expected = test_vals.get(k).cloned().unwrap();
+            // Check if the iterator returns the correct item.
+            assert_eq!(v, expected);
+            // Check if some key is returned once again.
+            assert_eq!(has_seen.insert(k, true), Some(false));
+        }
+        // Check if the iterator has gone through all items.
+        assert!(has_seen.iter().all(|(_, &v)| v));
+
+        has_seen.iter_mut().for_each(|(_, v)| *v = false);
+        for (k, v) in map {
             let expected = test_vals.get(k).cloned().unwrap();
             // Check if the iterator returns the correct item.
             assert_eq!(v, expected);
