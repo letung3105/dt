@@ -8,3 +8,4 @@ Motivations:
 + Inspecting the inner working of different data structures
 + Trying out intersting data structures (concurrent ones)
 + Getting into low-level uses of Rust
++ Learning the standard libraries' APIs

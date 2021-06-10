@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hash, Hasher};
 
@@ -23,6 +24,8 @@ use std::hash::{BuildHasher, Hash, Hasher};
 /// [source code]: https://github.com/jonhoo/rust-basic-hashmap
 ///
 /// # Examples
+///
+/// These examples are taken from Rust's standard library.
 ///
 /// ```
 /// use dt::containers::LinkedHashMap;
@@ -108,6 +111,34 @@ use std::hash::{BuildHasher, Hash, Hasher};
 /// for (viking, health) in &vikings {
 ///     println!("{:?} has {} hp", viking, health);
 /// }
+/// ```
+///
+/// TODO: Entry API
+/// HashMap also implements an Entry API, which allows for more complex methods of getting, setting, updating and removing keys and their values:
+///
+/// ```
+/// use std::collections::HashMap;
+///
+/// // type inference lets us omit an explicit type signature (which
+/// // would be `HashMap<&str, u8>` in this example).
+/// let mut player_stats = HashMap::new();
+///
+/// fn random_stat_buff() -> u8 {
+///     // could actually return some random value here - let's just return
+///     // some fixed value for now
+///     42
+/// }
+///
+/// // insert a key only if it doesn't already exist
+/// player_stats.entry("health").or_insert(100);
+///
+/// // insert a key using a function that provides a new value only if it
+/// // doesn't already exist
+/// player_stats.entry("defence").or_insert_with(random_stat_buff);
+///
+/// // update a key, guarding against the key possibly not being set
+/// let stat = player_stats.entry("attack").or_insert(100);
+/// *stat += random_stat_buff();
 /// ```
 #[derive(Debug)]
 pub struct LinkedHashMap<K, V, S = RandomState> {
@@ -227,7 +258,6 @@ where
 
     /// Returns a reference to the value corresponding to the key.
     ///
-    /// TODO: make the below statement true for our map
     /// The key may be any borrowed form of the map’s key type, but Hash and Eq on the borrowed
     /// form must match those for the key type.
     ///
@@ -240,19 +270,22 @@ where
     /// assert_eq!(map.get(&1), Some(&"a"));
     /// assert_eq!(map.get(&2), None);
     /// ```
-    pub fn get(&self, key: &K) -> Option<&V> {
+    pub fn get<Q>(&self, key: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
         let idx = self.index(key);
         self.buckets[idx]
             .items
             .iter()
-            .find(|&(ref k, _)| k == key)
+            .find(|&(ref k, _)| k.borrow() == key)
             .map(|&(_, ref v)| v)
     }
 
     /// Removes a key from the map, returning the value at the key if the key was previously in the
     /// map.
     ///
-    /// TODO: make the below statement true for our map
     /// The key may be any borrowed form of the map’s key type, but Hash and Eq on the borrowed
     /// form must match those for the key type.
     ///
@@ -266,12 +299,19 @@ where
     /// assert_eq!(map.remove(&1), Some("a"));
     /// assert_eq!(map.remove(&1), None);
     /// ```
-    pub fn remove(&mut self, key: &K) -> Option<V> {
+    pub fn remove<Q>(&mut self, key: &Q) -> Option<V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
         // self.buckets.remove
         let idx = self.index(&key);
         let bucket = &mut self.buckets[idx];
 
-        let entry_idx = bucket.items.iter().position(|&(ref k, _)| k == key)?;
+        let entry_idx = bucket
+            .items
+            .iter()
+            .position(|&(ref k, _)| k.borrow() == key)?;
         self.entries_count -= 1;
         Some(bucket.items.swap_remove(entry_idx).1)
     }
@@ -291,12 +331,16 @@ where
     /// assert_eq!(map.contains_key(&1), true);
     /// assert_eq!(map.contains_key(&2), false);
     /// ```
-    pub fn contains_key(&self, key: &K) -> bool {
+    pub fn contains_key<Q>(&self, key: &Q) -> bool
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
         let idx = self.index(key);
         self.buckets[idx]
             .items
             .iter()
-            .find(|&(ref k, _)| k == key)
+            .find(|&(ref k, _)| k.borrow() == key)
             .is_some()
     }
 
@@ -321,7 +365,11 @@ where
     }
 
     /// Get the index of the bucket for `key`.
-    fn index(&self, key: &K) -> usize {
+    fn index<Q>(&self, key: &Q) -> usize
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
         derive_bucket_index(self.hasher_builder.build_hasher(), key, self.buckets.len())
     }
 }
@@ -383,12 +431,12 @@ impl<K, V> Default for Bucket<K, V> {
 }
 
 /// Deriving the bucket's index from the `hashable` value.
-fn derive_bucket_index<H, T>(mut hasher: H, hashable: &T, n_buckets: usize) -> usize
+fn derive_bucket_index<H, K>(mut hasher: H, key: &K, n_buckets: usize) -> usize
 where
     H: Hasher,
-    T: Hash,
+    K: Hash + ?Sized,
 {
-    hashable.hash(&mut hasher);
+    key.hash(&mut hasher);
     (hasher.finish() % n_buckets as u64) as usize
 }
 
