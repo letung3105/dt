@@ -115,14 +115,14 @@ use std::ops::Index;
 /// ```
 ///
 /// TODO: Entry API
-/// HashMap also implements an Entry API, which allows for more complex methods of getting, setting, updating and removing keys and their values:
+/// LinkedHashMap also implements an Entry API, which allows for more complex methods of getting, setting, updating and removing keys and their values:
 ///
 /// ```
-/// use std::collections::HashMap;
+/// use dt::containers::LinkedHashMap;
 ///
 /// // type inference lets us omit an explicit type signature (which
-/// // would be `HashMap<&str, u8>` in this example).
-/// let mut player_stats = HashMap::new();
+/// // would be `LinkedHashMap<&str, u8>` in this example).
+/// let mut player_stats = LinkedHashMap::new();
 ///
 /// fn random_stat_buff() -> u8 {
 ///     // could actually return some random value here - let's just return
