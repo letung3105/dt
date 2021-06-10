@@ -138,7 +138,8 @@ where
 /// }
 /// ```
 ///
-/// LinkedHashMap also implements an Entry API, which allows for more complex methods of getting, setting, updating and removing keys and their values:
+/// LinkedHashMap also implements an Entry API, which allows for more complex methods of getting,
+/// setting, updating and removing keys and their values:
 ///
 /// ```
 /// use dt::containers::LinkedHashMap;
@@ -627,6 +628,13 @@ mod tests {
         assert_eq!(map.remove(&"foo"), None);
         assert_eq!(map.len(), 0);
         assert!(map.is_empty());
+    }
+
+    #[test]
+    fn op_index() {
+        let mut map = LinkedHashMap::new();
+        map.insert("foo", 42);
+        assert_eq!(map["foo"], 42);
     }
 
     #[test]
