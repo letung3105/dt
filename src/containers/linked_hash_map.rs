@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hash, Hasher};
+use std::ops::Index;
 
 /// A basic hash map.
 ///
@@ -371,6 +372,19 @@ where
         Q: Hash + Eq + ?Sized,
     {
         derive_bucket_index(self.hasher_builder.build_hasher(), key, self.buckets.len())
+    }
+}
+
+impl<K, Q, V, S> Index<&Q> for LinkedHashMap<K, V, S>
+where
+    K: Hash + Eq + Borrow<Q>,
+    Q: Hash + Eq + ?Sized,
+    S: BuildHasher,
+{
+    type Output = V;
+
+    fn index(&self, key: &Q) -> &Self::Output {
+        self.get(key).unwrap()
     }
 }
 
