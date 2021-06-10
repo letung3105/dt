@@ -658,13 +658,6 @@ mod tests {
     }
 
     #[test]
-    fn op_index() {
-        let mut map = LinkedHashMap::new();
-        map.insert("foo", 42);
-        assert_eq!(map["foo"], 42);
-    }
-
-    #[test]
     fn iterator() {
         // Keys and values to insert. Keys must be pair-wise different.
         let test_vals: HashMap<_, _> = vec![("foo", 7), ("bar", 11), ("baz", 13), ("quox", 17)]
