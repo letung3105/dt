@@ -3,6 +3,30 @@ use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::ops::Index;
 
+/// A data item that holds entries in [`LinkedHashMap`] whose key is hashed to the same value.
+///
+/// [`LinkedHashMap`]: crate::containers::LinkedHashMap
+#[derive(Debug)]
+struct Bucket<K, V> {
+    items: Vec<(K, V)>,
+}
+
+impl<K, V> Default for Bucket<K, V> {
+    fn default() -> Self {
+        Self { items: Vec::new() }
+    }
+}
+
+/// Deriving the bucket's index from the `hashable` value.
+fn derive_bucket_index<H, K>(mut hasher: H, key: &K, n_buckets: usize) -> usize
+where
+    H: Hasher,
+    K: Hash + ?Sized,
+{
+    key.hash(&mut hasher);
+    (hasher.finish() % n_buckets as u64) as usize
+}
+
 /// A basic hash map.
 ///
 /// It is required that the keys implement the [`Eq`] and [`Hash`] traits, although this can
@@ -114,7 +138,6 @@ use std::ops::Index;
 /// }
 /// ```
 ///
-/// TODO: Entry API
 /// LinkedHashMap also implements an Entry API, which allows for more complex methods of getting, setting, updating and removing keys and their values:
 ///
 /// ```
@@ -305,7 +328,6 @@ where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
     {
-        // self.buckets.remove
         let idx = self.index(&key);
         let bucket = &mut self.buckets[idx];
 
@@ -315,6 +337,48 @@ where
             .position(|&(ref k, _)| k.borrow() == key)?;
         self.entries_count -= 1;
         Some(bucket.items.swap_remove(entry_idx).1)
+    }
+
+    /// Gets the given key’s corresponding entry in the map for in-place manipulation.
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    ///
+    /// let mut letters = HashMap::new();
+    ///
+    /// for ch in "a short treatise on fungi".chars() {
+    ///     let counter = letters.entry(ch).or_insert(0);
+    ///     *counter += 1;
+    /// }
+    ///
+    /// assert_eq!(letters[&'s'], 2);
+    /// assert_eq!(letters[&'t'], 3);
+    /// assert_eq!(letters[&'u'], 1);
+    /// assert_eq!(letters.get(&'y'), None);
+    /// ```
+    pub fn entry(&mut self, key: K) -> Entry<'_, K, V, S> {
+        if self.buckets.is_empty() || self.entries_count > 3 * self.buckets.len() / 4 {
+            self.grow();
+        }
+
+        let bucket_idx = self.index(&key);
+        if let Some(entry_idx) = self.buckets[bucket_idx]
+            .items
+            .iter_mut()
+            .position(|&mut (ref k, _)| *k == key)
+        {
+            // We are using `position` instead of `find` cause `self.buckets` will be borrowed
+            // inside the scope of the if statement; using `find` somehow scoped `self.buckets`
+            // within the function, disallowing `self` to be re-borrowed in the else case.
+            let &mut (ref key, ref mut value) = &mut self.buckets[bucket_idx].items[entry_idx];
+            return Entry::Occupied(OccupiedEntry { key, value });
+        }
+        Entry::Vacant(VacantEntry {
+            key,
+            bucket_idx,
+            map: self,
+        })
     }
 
     /// Returns true if the map contains a value for the specified key.
@@ -352,6 +416,7 @@ where
             0 => 1,
             n => 2 * n,
         };
+
         let mut buckets = Vec::with_capacity(target_size);
         buckets.extend((0..target_size).map(|_| Bucket::default()));
         for (key, value) in self
@@ -430,28 +495,103 @@ impl<'a, K, V, S> Iterator for Iter<'a, K, V, S> {
     }
 }
 
-/// A data item that holds entries in [`LinkedHashMap`] whose key is hashed to the same value.
-///
-/// [`LinkedHashMap`]: crate::containers::LinkedHashMap
 #[derive(Debug)]
-struct Bucket<K, V> {
-    items: Vec<(K, V)>,
+pub struct OccupiedEntry<'a, K, V> {
+    key: &'a K,
+    value: &'a mut V,
 }
 
-impl<K, V> Default for Bucket<K, V> {
-    fn default() -> Self {
-        Self { items: Vec::new() }
+#[derive(Debug)]
+pub struct VacantEntry<'a, K, V, S> {
+    key: K,
+    bucket_idx: usize,
+    map: &'a mut LinkedHashMap<K, V, S>,
+}
+
+#[derive(Debug)]
+pub enum Entry<'a, K, V, S> {
+    Occupied(OccupiedEntry<'a, K, V>),
+    Vacant(VacantEntry<'a, K, V, S>),
+}
+
+impl<'a, K, V, S> Entry<'a, K, V, S> {
+    pub fn key(&self) -> &K {
+        match *self {
+            Self::Occupied(OccupiedEntry { key, value: _ }) => key,
+            Self::Vacant(VacantEntry {
+                ref key,
+                bucket_idx: _,
+                map: _,
+            }) => key,
+        }
+    }
+
+    pub fn and_modify<F>(self, f: F) -> Self
+    where
+        F: FnOnce(&mut V),
+    {
+        if let Self::Occupied(occupied_entry) = self {
+            f(occupied_entry.value);
+            return Self::Occupied(occupied_entry);
+        }
+        self
     }
 }
 
-/// Deriving the bucket's index from the `hashable` value.
-fn derive_bucket_index<H, K>(mut hasher: H, key: &K, n_buckets: usize) -> usize
+impl<'a, K, V, S> Entry<'a, K, V, S>
 where
-    H: Hasher,
-    K: Hash + ?Sized,
+    K: Hash + Eq,
+    S: BuildHasher,
 {
-    key.hash(&mut hasher);
-    (hasher.finish() % n_buckets as u64) as usize
+    pub fn or_default(self) -> &'a mut V
+    where
+        V: Default,
+    {
+        self.or_insert(Default::default())
+    }
+
+    pub fn or_insert(self, value: V) -> &'a mut V {
+        match self {
+            Self::Occupied(OccupiedEntry { key: _, value }) => value,
+            Self::Vacant(VacantEntry {
+                key,
+                bucket_idx,
+                map,
+            }) => {
+                map.insert(key, value);
+                // unwrap() cause we just inserted a value
+                let &mut (_, ref mut value) = map.buckets[bucket_idx].items.last_mut().unwrap();
+                value
+            }
+        }
+    }
+
+    pub fn or_insert_with<F>(self, f: F) -> &'a mut V
+    where
+        F: FnOnce() -> V,
+    {
+        self.or_insert(f())
+    }
+
+    pub fn or_insert_with_key<F>(self, f: F) -> &'a mut V
+    where
+        F: FnOnce(&K) -> V,
+    {
+        match self {
+            Self::Occupied(OccupiedEntry { key: _, value }) => value,
+            Self::Vacant(VacantEntry {
+                key,
+                bucket_idx,
+                map,
+            }) => {
+                let value = f(&key);
+                map.insert(key, value);
+                // unwrap() cause we just inserted a value
+                let &mut (_, ref mut value) = map.buckets[bucket_idx].items.last_mut().unwrap();
+                value
+            }
+        }
+    }
 }
 
 #[cfg(test)]
