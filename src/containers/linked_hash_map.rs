@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hash, Hasher};
+use std::iter::FromIterator;
 use std::ops::Index;
 
 /// A data item that holds entries in [`LinkedHashMap`] whose key is hashed to the same value.
@@ -164,6 +165,16 @@ where
 /// // update a key, guarding against the key possibly not being set
 /// let stat = player_stats.entry("attack").or_insert(100);
 /// *stat += random_stat_buff();
+/// ```
+///
+/// A LinkedHashMap with fixed list of elements can be initialized from an array.
+///
+/// ```
+/// use dt::containers::LinkedHashMap;
+///
+/// let timber_resources: LinkedHashMap<&str, i32> = [("Norway", 100), ("Denmark", 50), ("Iceland", 10)]
+///     .iter().cloned().collect();
+/// // use the values stored in map
 /// ```
 #[derive(Debug)]
 pub struct LinkedHashMap<K, V, S = RandomState> {
@@ -451,6 +462,22 @@ where
 
     fn index(&self, key: &Q) -> &Self::Output {
         self.get(key).unwrap()
+    }
+}
+
+impl<K, V> FromIterator<(K, V)> for LinkedHashMap<K, V, RandomState>
+where
+    K: Hash + Eq,
+{
+    fn from_iter<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+    {
+        let mut map = Self::new();
+        for (k, v) in iter {
+            map.insert(k, v);
+        }
+        map
     }
 }
 
