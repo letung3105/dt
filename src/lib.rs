@@ -6,7 +6,7 @@
 //! circumstances. These data structures are suboptimal comparing to Rust's standard library
 //! implementations and are proned to errors or may exhibit unexpected behaviors.
 
-#![warn(missing_docs)]
-#![deny(missing_debug_implementations, unsafe_code)]
+#![warn(missing_docs, unsafe_code)]
+#![deny(missing_debug_implementations)]
 
 pub mod containers;

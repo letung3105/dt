@@ -1,7 +1,5 @@
 //! Container types
 
-#![deny(missing_docs)]
-
 mod doubly_linked_list;
 mod linked_hash_map;
 
