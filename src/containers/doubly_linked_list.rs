@@ -19,10 +19,12 @@ impl<T> Node<T> {
 
 /// A doubly-linked list with owned nodes.
 ///
-/// The DoublyLinkedList allows pushing and popping elements at either end in constant time.
+/// The DoublyLinkedList allows pushing and popping elements at either end in
+/// constant time.
 ///
-/// NOTE: It is almost always better to use Vec or VecDeque because array-based containers are
-/// generally faster, more memory efficient, and make better use of CPU cache.
+/// NOTE: It is almost always better to use Vec or VecDeque because array-based
+/// containers are generally faster, more memory efficient, and make better use
+/// of CPU cache.
 #[derive(Debug)]
 pub struct DoublyLinkedList<T> {
     head: Option<NonNull<Node<T>>>,
@@ -31,7 +33,23 @@ pub struct DoublyLinkedList<T> {
     marker: PhantomData<Box<Node<T>>>,
 }
 
-#[allow(unsafe_code)]
+impl<T> Default for DoublyLinkedList<T> {
+    fn default() -> Self {
+        Self {
+            head: None,
+            tail: None,
+            len: 0,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<T> Drop for DoublyLinkedList<T> {
+    fn drop(&mut self) {
+        while self.pop_front().is_some() {}
+    }
+}
+
 impl<T> DoublyLinkedList<T> {
     /// Creates an empty DoublyLinkedList.
     ///
@@ -53,9 +71,11 @@ impl<T> DoublyLinkedList<T> {
 
     /// Moves all elements from other to the end of the list.
     ///
-    /// This reuses all the nodes from other and moves them into self. After this operation, other becomes empty.
+    /// This reuses all the nodes from other and moves them into self. After
+    /// this operation, other becomes empty.
     ///
     /// This operation should compute in O(1) time and O(1) memory.
+    ///
     /// # Examples
     ///
     /// ```
@@ -78,15 +98,20 @@ impl<T> DoublyLinkedList<T> {
     ///
     /// assert!(list2.is_empty());
     /// ```
+    #[allow(unsafe_code)]
     pub fn append(&mut self, other: &mut DoublyLinkedList<T>) {
         match self.tail {
             Some(mut tail) => {
+                // SAFETY: Our tail is Some so we know that the pointer is still
+                // valid and we can direference the raw pointer to access its
+                // data
                 unsafe { tail.as_mut().next = other.head };
                 if let Some(mut head) = other.head {
+                    // SAFETY: Other's head is Some so we know that the pointer
+                    // is still valid and we can dereference the raw pointer
+                    // to access its data
                     unsafe { head.as_mut().prev = self.tail };
                 }
-                other.head = None;
-                other.tail = None;
             }
             None => {
                 self.head = other.head;
@@ -94,6 +119,8 @@ impl<T> DoublyLinkedList<T> {
             }
         }
         self.len += other.len;
+        other.head = None;
+        other.tail = None;
         other.len = 0;
     }
 
@@ -149,7 +176,7 @@ impl<T> DoublyLinkedList<T> {
     pub fn iter_mut(&mut self) -> IterMut<'_, T> {
         IterMut {
             it: self.head,
-            ll: self,
+            marker: PhantomData,
         }
     }
 
@@ -217,10 +244,11 @@ impl<T> DoublyLinkedList<T> {
     /// assert_eq!(dl.front(), None);
     /// ```
     pub fn clear(&mut self) {
-        todo!()
+        *self = Self::new();
     }
 
-    /// Returns true if the DoublyLinkedList contains an element equal to the given value.
+    /// Returns true if the DoublyLinkedList contains an element equal to the
+    /// given value.
     ///
     /// # Examples
     ///
@@ -236,13 +264,16 @@ impl<T> DoublyLinkedList<T> {
     /// assert_eq!(list.contains(&0), true);
     /// assert_eq!(list.contains(&10), false);
     /// ```
+    #[allow(unsafe_code)]
     pub fn contains(&self, data: &T) -> bool
     where
         T: PartialEq<T>,
     {
         let mut it = self.head;
         while let Some(node) = it {
-            let node = unsafe { &*node.as_ptr() };
+            // SAFETY: Current Node is not None so we know the raw pointer
+            // inside is still valid
+            let node = unsafe { node.as_ref() };
             if *data == node.data {
                 return true;
             }
@@ -264,15 +295,19 @@ impl<T> DoublyLinkedList<T> {
     /// dl.push_front(1);
     /// assert_eq!(dl.front(), Some(&1));
     /// ```
+    #[allow(unsafe_code)]
     pub fn front(&self) -> Option<&T> {
         if let Some(head) = self.head {
+            // SAFETY: Head is not None so we know the raw pointer inside is
+            // still valid
             let data = unsafe { &(*head.as_ptr()).data };
             return Some(data);
         }
         None
     }
 
-    /// Provides a mutable reference to the front element, or None if the list is empty.
+    /// Provides a mutable reference to the front element, or None if the list
+    /// is empty.
     ///
     /// # Examples
     ///
@@ -291,8 +326,11 @@ impl<T> DoublyLinkedList<T> {
     /// }
     /// assert_eq!(dl.front(), Some(&5));
     /// ```
+    #[allow(unsafe_code)]
     pub fn front_mut(&mut self) -> Option<&mut T> {
         if let Some(head) = self.head {
+            // SAFETY: Head is not None so we know the raw pointer inside is
+            // still valid
             let data = unsafe { &mut (*head.as_ptr()).data };
             return Some(data);
         }
@@ -311,15 +349,19 @@ impl<T> DoublyLinkedList<T> {
     /// dl.push_back(1);
     /// assert_eq!(dl.back(), Some(&1));
     /// ```
+    #[allow(unsafe_code)]
     pub fn back(&self) -> Option<&T> {
         if let Some(tail) = self.tail {
+            // SAFETY: Tail is not None so we know the raw pointer inside is
+            // still valid
             let data = unsafe { &(*tail.as_ptr()).data };
             return Some(data);
         }
         None
     }
 
-    /// Provides a mutable reference to the back element, or None if the list is empty.
+    /// Provides a mutable reference to the back element, or None if the list
+    /// is empty.
     ///
     /// # Examples
     ///
@@ -338,8 +380,11 @@ impl<T> DoublyLinkedList<T> {
     /// }
     /// assert_eq!(dl.back(), Some(&5));
     /// ```
+    #[allow(unsafe_code)]
     pub fn back_mut(&mut self) -> Option<&mut T> {
         if let Some(tail) = self.tail {
+            // SAFETY: Tail is not None so we know the raw pointer inside is
+            // still valid
             let data = unsafe { &mut (*tail.as_ptr()).data };
             return Some(data);
         }
@@ -363,9 +408,11 @@ impl<T> DoublyLinkedList<T> {
     /// dl.push_front(1);
     /// assert_eq!(dl.front().unwrap(), &1);
     /// ```
+    #[allow(unsafe_code)]
     pub fn push_front(&mut self, data: T) {
-        // Create a new node with `next` points to the current head and `prev` points `None`.
-        // Then allocate the node on the heap and take a raw pointer to it.
+        // Create a new node with `next` points to the current head and `prev`
+        // points `None`.  Then allocate the node on the heap and take a raw
+        // pointer to it.
         let mut node = Node::new(data);
         node.next = self.head;
         node.prev = None;
@@ -373,16 +420,18 @@ impl<T> DoublyLinkedList<T> {
 
         match self.head {
             // Empty list => `tail` also points to the new node.
-            None => self.tail = NonNull::new(node),
+            None => self.tail = Some(unsafe { NonNull::new_unchecked(node) }),
             // Non-empty list => `prev` of current `head` points to the new node.
-            Some(head) => {
-                // SAFETY: TODO
-                let head = unsafe { &mut *head.as_ptr() };
-                head.prev = NonNull::new(node);
+            Some(mut head) => {
+                // SAFETY: Head is not None so we know the raw pointer inside
+                // is still valid
+                unsafe {
+                    head.as_mut().prev = Some(NonNull::new_unchecked(node));
+                }
             }
         }
 
-        self.head = NonNull::new(node);
+        self.head = Some(unsafe { NonNull::new_unchecked(node) });
         self.len += 1;
     }
 
@@ -404,21 +453,22 @@ impl<T> DoublyLinkedList<T> {
     /// assert_eq!(d.pop_front(), Some(1));
     /// assert_eq!(d.pop_front(), None);
     /// ```
+    #[allow(unsafe_code)]
     pub fn pop_front(&mut self) -> Option<T> {
-        if let Some(head) = self.head {
-            let head = unsafe { &mut *head.as_ptr() };
-            if let Some(next) = head.next {
-                let next = unsafe { &mut *next.as_ptr() };
-                next.prev = None;
-            }
-
+        // SAFETY: The head of the linked list is still pointing to a Node so
+        // we know that its data has not been dropped. So we can dereference
+        // the raw pointer and deallocate its data outself.
+        self.head.map(|head| unsafe {
+            let head = Box::from_raw(head.as_ptr());
             self.head = head.next;
             self.len -= 1;
 
-            let head = unsafe { Box::from_raw(head) };
-            return Some(head.data);
-        }
-        None
+            match self.head {
+                None => self.tail = None,
+                Some(mut next) => next.as_mut().prev = None,
+            }
+            head.data
+        })
     }
 
     /// Appends an element to the back of a list.
@@ -435,9 +485,11 @@ impl<T> DoublyLinkedList<T> {
     /// d.push_back(3);
     /// assert_eq!(3, *d.back().unwrap());
     /// ```
+    #[allow(unsafe_code)]
     pub fn push_back(&mut self, data: T) {
-        // Create a new node with `prev` points to the current tail and `next` points `None`.
-        // Then allocate the node on the heap and take a raw pointer to it.
+        // Create a new node with `prev` points to the current tail and `next`
+        // points `None`. Then allocate the node on the heap and take a raw
+        // pointer to it.
         let mut node = Node::new(data);
         node.next = None;
         node.prev = self.tail;
@@ -445,20 +497,23 @@ impl<T> DoublyLinkedList<T> {
 
         match self.tail {
             // Empty list => `head` also points to the new node.
-            None => self.head = NonNull::new(node),
-            // Non-empty list => `next` of current `tail` points to the new node.
+            None => self.head = Some(unsafe { NonNull::new_unchecked(node) }),
+            // Non-empty list => `next` of current `tail` points to the new
+            // node.
             Some(tail) => {
-                // SAFETY: TODO
+                // SAFETY: Tai is not None so we not that the raw pointer is
+                // still valid.
                 let tail = unsafe { &mut *tail.as_ptr() };
-                tail.next = NonNull::new(node);
+                tail.next = Some(unsafe { NonNull::new_unchecked(node) });
             }
         }
 
-        self.tail = NonNull::new(node);
+        self.tail = Some(unsafe { NonNull::new_unchecked(node) });
         self.len += 1;
     }
 
-    /// Removes the last element from a list and returns it, or None if it is empty.
+    /// Removes the last element from a list and returns it, or None if it is
+    /// empty.
     ///
     /// This operation should compute in O(1) time.
     ///
@@ -473,24 +528,26 @@ impl<T> DoublyLinkedList<T> {
     /// d.push_back(3);
     /// assert_eq!(d.pop_back(), Some(3));
     /// ```
+    #[allow(unsafe_code)]
     pub fn pop_back(&mut self) -> Option<T> {
-        if let Some(mut tail) = self.tail {
-            let tail = unsafe { tail.as_mut() };
-            if let Some(mut prev) = tail.prev {
-                let prev = unsafe { prev.as_mut() };
-                prev.next = None;
-            }
-
+        // SAFETY: The tail of the linked list is still pointing to a Node so
+        // we know that its data has not been dropped. So we can dereference
+        // the raw pointer and deallocate its data outself.
+        self.tail.map(|tail| unsafe {
+            let tail = Box::from_raw(tail.as_ptr());
             self.tail = tail.prev;
             self.len -= 1;
 
-            let tail = unsafe { Box::from_raw(tail) };
-            return Some(tail.data);
-        }
-        None
+            match self.tail {
+                None => self.head = None,
+                Some(mut prev) => prev.as_mut().next = None,
+            }
+            tail.data
+        })
     }
 
-    /// Splits the list into two at the given index. Returns everything after the given index, including the index.
+    /// Splits the list into two at the given index. Returns everything after
+    /// the given index, including the index.
     ///
     /// This operation should compute in O(n) time.
     ///
@@ -514,14 +571,52 @@ impl<T> DoublyLinkedList<T> {
     /// assert_eq!(split.pop_front(), Some(1));
     /// assert_eq!(split.pop_front(), None);
     /// ```
+    #[allow(unsafe_code)]
     pub fn split_off(&mut self, at: usize) -> DoublyLinkedList<T> {
-        todo!()
+        let len = self.len();
+        assert!(at <= len, "Cannot split off at a nonexistent index");
+
+        if at == 0 {
+            return std::mem::take(self);
+        } else if at == len {
+            return Self::new();
+        }
+
+        let mut it_idx = 0;
+        let mut it_node = self.head;
+        loop {
+            match it_node {
+                None => unreachable!(),
+                Some(mut node_ptr) => {
+                    let node = unsafe { node_ptr.as_mut() };
+
+                    if it_idx == at {
+                        if let Some(mut prev) = node.prev {
+                            unsafe { prev.as_mut().next = None };
+                        }
+                        let ll = DoublyLinkedList {
+                            head: Some(unsafe { NonNull::new_unchecked(node) }),
+                            tail: self.tail,
+                            len: len - at,
+                            marker: PhantomData,
+                        };
+                        self.tail = node.prev;
+                        node.prev = None;
+                        break ll;
+                    }
+
+                    it_idx += 1;
+                    it_node = node.next;
+                }
+            }
+        }
     }
 }
 
 /// An iterator over the elements of a DoublyLinkedList.
 ///
-/// This struct is created by [`DoublyLinkedList::iter()`]. See its documentation for more.
+/// This struct is created by [`DoublyLinkedList::iter()`]. See its
+/// documentation for more.
 ///
 /// [`DoublyLinkedList::iter()`]: crate::containers::DoublyLinkedList#iter;
 #[derive(Debug)]
@@ -530,11 +625,13 @@ pub struct Iter<'a, T: 'a> {
     marker: PhantomData<&'a Node<T>>,
 }
 
-#[allow(unsafe_code)]
 impl<'a, T> Iterator for Iter<'a, T> {
     type Item = &'a T;
 
+    #[allow(unsafe_code)]
     fn next(&mut self) -> Option<Self::Item> {
+        // SAFETY: Current Node is Some, so we know its raw pointer is
+        // still valid
         self.it.map(|node| unsafe {
             let node = &mut *node.as_ptr();
             self.it = node.next;
@@ -545,20 +642,23 @@ impl<'a, T> Iterator for Iter<'a, T> {
 
 /// A mutable iterator over the elements of a DoublyLinkedList.
 ///
-/// This struct is created by [`DoublyLinkedList::iter_mut()`]. See its documentation for more.
+/// This struct is created by [`DoublyLinkedList::iter_mut()`]. See its
+/// documentation for more.
 ///
 /// [`DoublyLinkedList::iter_mut()`]: crate::containers::DoublyLinkedList#iter_mut;
 #[derive(Debug)]
 pub struct IterMut<'a, T: 'a> {
     it: Option<NonNull<Node<T>>>,
-    ll: &'a mut DoublyLinkedList<T>,
+    marker: PhantomData<&'a mut Node<T>>,
 }
 
-#[allow(unsafe_code)]
 impl<'a, T> Iterator for IterMut<'a, T> {
     type Item = &'a mut T;
 
+    #[allow(unsafe_code)]
     fn next(&mut self) -> Option<Self::Item> {
+        // SAFETY: Current Node is Some, so we know its raw pointer is still
+        // valid
         self.it.map(|node| unsafe {
             let node = &mut *node.as_ptr();
             self.it = node.next;

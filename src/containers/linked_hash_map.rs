@@ -6,9 +6,10 @@ use std::ops::Index;
 
 /// A basic hash map.
 ///
-/// It is required that the keys implement the [`Eq`] and [`Hash`] traits, although this can
-/// frequently be achieved by using `#[derive(PartialEq, Eq, Hash)]`. If you implement these
-/// yourself, it is important that the following property holds:
+/// It is required that the keys implement the [`Eq`] and [`Hash`] traits,
+/// although this can frequently be achieved by using
+/// `#[derive(PartialEq, Eq, Hash)]`. If you implement these yourself, it is
+/// important that the following property holds:
 ///
 /// ```text
 /// k1 == k2 -> hash(k1) == hash(k2)
@@ -18,9 +19,9 @@ use std::ops::Index;
 ///
 /// # Attributions
 ///
-/// This `LinkedHashMap` implementation is based off [Jon Gjengset's livestream] on the concept and
-/// implementation of the data structure itself. The [source code] of the project from the
-/// livestream can be found on Github.
+/// This `LinkedHashMap` implementation is based off [Jon Gjengset's livestream]
+/// on the concept and implementation of the data structure itself. The
+/// [source code] of the project from the livestream can be found on Github.
 ///
 /// [Jon Gjengset's livestream]: https://www.youtube.com/watch?v=k6xR2kf9hlA
 /// [source code]: https://github.com/jonhoo/rust-basic-hashmap
@@ -83,7 +84,8 @@ use std::ops::Index;
 /// }
 /// ```
 ///
-/// The easiest way to use `LinkedHashMap` with a custom key type is to derive [`Eq`] and [`Hash`].
+/// The easiest way to use `LinkedHashMap` with a custom key type is to derive
+/// [`Eq`] and [`Hash`].
 /// We must also derive [`PartialEq`].
 ///
 /// ```
@@ -115,8 +117,8 @@ use std::ops::Index;
 /// }
 /// ```
 ///
-/// LinkedHashMap also implements an Entry API, which allows for more complex methods of getting,
-/// setting, updating and removing keys and their values:
+/// LinkedHashMap also implements an Entry API, which allows for more complex
+/// methods of getting, setting, updating and removing keys and their values:
 ///
 /// ```
 /// use dt::containers::LinkedHashMap;
@@ -143,27 +145,31 @@ use std::ops::Index;
 /// *stat += random_stat_buff();
 /// ```
 ///
-/// A LinkedHashMap with fixed list of elements can be initialized from an array.
+/// A LinkedHashMap with fixed list of elements can be initialized from an
+/// array.
 ///
 /// ```
 /// use dt::containers::LinkedHashMap;
 ///
-/// let timber_resources: LinkedHashMap<&str, i32> = [("Norway", 100), ("Denmark", 50), ("Iceland", 10)]
+/// let timber_resources: LinkedHashMap<&str, i32> =
+///     [("Norway", 100), ("Denmark", 50), ("Iceland", 10)]
 ///     .iter().cloned().collect();
 /// // use the values stored in map
 /// ```
 #[derive(Debug)]
 pub struct LinkedHashMap<K, V, S = RandomState> {
-    // This hash map implementation relies on an array of buckets that is indexed by the hash of an
-    // entry's key. If 2 different keys are hashed to the same value, the entries are put into the
-    // same bucket. These entries can later be retrieved by comparing both the hashed key and the
-    // actual key.
+    // This hash map implementation relies on an array of buckets that is
+    // indexed by the hash of an entry's key. If 2 different keys are hashed to
+    // the same value, the entries are put into the same bucket. These entries
+    // can later be retrieved by comparing both the hashed key and the actual
+    // key.
     buckets: Vec<Bucket<K, V>>,
     hasher_builder: S,
     entries_count: usize,
 }
 
-/// A data item that holds entries in [`LinkedHashMap`] whose key is hashed to the same value.
+/// A data item that holds entries in [`LinkedHashMap`] whose key is hashed to
+/// the same value.
 ///
 /// [`LinkedHashMap`]: crate::containers::LinkedHashMap
 #[derive(Debug)]
@@ -200,8 +206,8 @@ impl<K, V> Default for LinkedHashMap<K, V, RandomState> {
 impl<K, V> LinkedHashMap<K, V, RandomState> {
     /// Creates an empty `LinkedHashMap`.
     ///
-    /// The hash map is initially created with an empty list of buckets, so it will not allocate
-    /// until it is first inserted into.
+    /// The hash map is initially created with an empty list of buckets, so it
+    /// will not allocate until it is first inserted into.
     ///
     /// # Examples
     ///
@@ -257,9 +263,9 @@ where
     ///
     /// If the map did not have this key present, [`None`] is returned.
     ///
-    /// If the map did have this key present, the value is updated, and the old value is returned.
-    /// The key is not updated, though; this matters for types that can be `==` without being
-    /// identical.
+    /// If the map did have this key present, the value is updated, and the old 
+    /// value is returned.  The key is not updated, though; this matters for 
+    /// types that can be `==` without being identical.
     ///
     /// # Examples
     ///
@@ -275,7 +281,9 @@ where
     /// assert_eq!(map[&37], "c");
     /// ```
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
-        if self.buckets.is_empty() || self.entries_count > 3 * self.buckets.len() / 4 {
+        if self.buckets.is_empty()
+            || self.entries_count > 3 * self.buckets.len() / 4
+        {
             self.grow();
         }
 
@@ -294,8 +302,8 @@ where
 
     /// Returns a reference to the value corresponding to the key.
     ///
-    /// The key may be any borrowed form of the map’s key type, but Hash and Eq on the borrowed
-    /// form must match those for the key type.
+    /// The key may be any borrowed form of the map’s key type, but Hash and Eq 
+    /// on the borrowed form must match those for the key type.
     ///
     /// # Examples
     ///
@@ -319,11 +327,11 @@ where
             .map(|&(_, ref v)| v)
     }
 
-    /// Removes a key from the map, returning the value at the key if the key was previously in the
-    /// map.
+    /// Removes a key from the map, returning the value at the key if the key 
+    /// was previously in the map.
     ///
-    /// The key may be any borrowed form of the map’s key type, but Hash and Eq on the borrowed
-    /// form must match those for the key type.
+    /// The key may be any borrowed form of the map’s key type, but Hash and Eq 
+    /// on the borrowed form must match those for the key type.
     ///
     /// # Examples
     ///
@@ -351,7 +359,9 @@ where
         Some(bucket.items.swap_remove(entry_idx).1)
     }
 
-    /// Gets the given key’s corresponding entry in the map for in-place manipulation.
+    /// Gets the given key’s corresponding entry in the map for in-place 
+    /// manipulation.
+    ///
     /// # Examples
     ///
     /// ```
@@ -370,7 +380,9 @@ where
     /// assert_eq!(letters.get(&'y'), None);
     /// ```
     pub fn entry(&mut self, key: K) -> Entry<'_, K, V, S> {
-        if self.buckets.is_empty() || self.entries_count > 3 * self.buckets.len() / 4 {
+        if self.buckets.is_empty()
+            || self.entries_count > 3 * self.buckets.len() / 4
+        {
             self.grow();
         }
 
@@ -380,10 +392,12 @@ where
             .iter_mut()
             .position(|&mut (ref k, _)| *k == key)
         {
-            // We are using `position` instead of `find` cause `self.buckets` will be borrowed
-            // inside the scope of the if statement; using `find` somehow scoped `self.buckets`
-            // within the function, disallowing `self` to be re-borrowed in the else case.
-            let &mut (ref key, ref mut value) = &mut self.buckets[bucket_idx].items[entry_idx];
+            // We are using `position` instead of `find` cause `self.buckets` 
+            // will be borrowed inside the scope of the if statement; using 
+            // `find` somehow scoped `self.buckets` within the function, 
+            // disallowing `self` to be re-borrowed in the else case.
+            let &mut (ref key, ref mut value) =
+                &mut self.buckets[bucket_idx].items[entry_idx];
             return Entry::Occupied(OccupiedEntry { key, value });
         }
         Entry::Vacant(VacantEntry {
@@ -395,8 +409,8 @@ where
 
     /// Returns true if the map contains a value for the specified key.
     ///
-    /// The key may be any borrowed form of the map’s key type, but Hash and Eq on the borrowed
-    /// form must match those for the key type.
+    /// The key may be any borrowed form of the map’s key type, but Hash and Eq 
+    /// on the borrowed form must match those for the key type.
     ///
     /// # Examples
     ///
@@ -421,8 +435,9 @@ where
             .is_some()
     }
 
-    /// Increase the size of the array of buckets. If there is no bucket, extend the array by one,
-    /// otherwise, double the array's size and reindex all existing entries.
+    /// Increase the size of the array of buckets. If there is no bucket, extend 
+    /// the array by one, otherwise, double the array's size and reindex all 
+    /// existing entries.
     fn grow(&mut self) {
         let target_size = match self.buckets.len() {
             0 => 1,
@@ -436,7 +451,11 @@ where
             .iter_mut()
             .flat_map(|bucket| bucket.items.drain(..))
         {
-            let idx = derive_bucket_index(self.hasher_builder.build_hasher(), &key, target_size);
+            let idx = derive_bucket_index(
+                self.hasher_builder.build_hasher(),
+                &key,
+                target_size,
+            );
             buckets[idx].items.push((key, value));
         }
         self.buckets = buckets;
@@ -448,7 +467,11 @@ where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
     {
-        derive_bucket_index(self.hasher_builder.build_hasher(), key, self.buckets.len())
+        derive_bucket_index(
+            self.hasher_builder.build_hasher(),
+            key,
+            self.buckets.len(),
+        )
     }
 }
 
@@ -494,11 +517,13 @@ pub struct Iter<'a, K, V, S> {
 impl<'a, K, V, S> Iterator for Iter<'a, K, V, S> {
     type Item = (&'a K, &'a V);
 
-    /// We keep two indices, one index for the bucket and one index for the entry within the bucket
-    /// that is currently pointed at.
+    /// We keep two indices, one index for the bucket and one index for the 
+    /// entry within the bucket that is currently pointed at.
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(bucket) = self.map.buckets.get(self.bucket_idx) {
-            if let Some(&(ref key, ref value)) = bucket.items.get(self.bucket_entry_idx) {
+            if let Some(&(ref key, ref value)) =
+                bucket.items.get(self.bucket_entry_idx)
+            {
                 self.bucket_entry_idx += 1;
                 return Some((key, value));
             }
@@ -535,8 +560,8 @@ pub struct IntoIter<K, V, S> {
 impl<K, V, S> Iterator for IntoIter<K, V, S> {
     type Item = (K, V);
 
-    /// We keep two indices, one index for the bucket and one index for the entry within the bucket
-    /// that is currently pointed at.
+    /// We keep two indices, one index for the bucket and one index for the 
+    /// entry within the bucket that is currently pointed at.
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(bucket) = self.map.buckets.get_mut(self.bucket_idx) {
             if let Some((key, value)) = bucket.items.pop() {
@@ -626,7 +651,8 @@ where
             }) => {
                 map.insert(key, value);
                 // unwrap() cause we just inserted a value
-                let &mut (_, ref mut value) = map.buckets[bucket_idx].items.last_mut().unwrap();
+                let &mut (_, ref mut value) =
+                    map.buckets[bucket_idx].items.last_mut().unwrap();
                 value
             }
         }
@@ -653,7 +679,8 @@ where
                 let value = f(&key);
                 map.insert(key, value);
                 // unwrap() cause we just inserted a value
-                let &mut (_, ref mut value) = map.buckets[bucket_idx].items.last_mut().unwrap();
+                let &mut (_, ref mut value) =
+                    map.buckets[bucket_idx].items.last_mut().unwrap();
                 value
             }
         }
@@ -699,9 +726,10 @@ mod tests {
     #[test]
     fn iterator() {
         // Keys and values to insert. Keys must be pair-wise different.
-        let test_vals: HashMap<_, _> = vec![("foo", 7), ("bar", 11), ("baz", 13), ("quox", 17)]
-            .into_iter()
-            .collect();
+        let test_vals: HashMap<_, _> =
+            vec![("foo", 7), ("bar", 11), ("baz", 13), ("quox", 17)]
+                .into_iter()
+                .collect();
 
         // Keep track of whether an entry has been seen.
         let mut has_seen: HashMap<_, _> = vec![
